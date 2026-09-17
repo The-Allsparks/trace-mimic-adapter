@@ -1,0 +1,87 @@
+name: CI
+
+# What each job prevents:
+#   test           - broken compile/tests, architecture regressions, javadoc
+#   docs-structure - missing README / LICENSE / AGENTS.md, and README claims
+#                    that TRACE and MIMIC still build independently
+#
+# Architecture tests run inside `./gradlew check`.
+# Third-party actions are pinned to full commit SHAs.
+
+permissions:
+  contents: read
+  packages: read
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        working-directory: trace-mimic-adapter
+    steps:
+      - name: Checkout adapter
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: trace-mimic-adapter
+      - name: Checkout TRACE sibling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: The-Allsparks/TRACE
+          path: TRACE
+      - name: Checkout MIMIC sibling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: The-Allsparks/MIMIC
+          path: MIMIC
+      - name: Checkout allsparks-contracts sibling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: The-Allsparks/allsparks-contracts
+          path: allsparks-contracts
+      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: trace-mimic-adapter/gradle/wrapper/gradle-wrapper.properties
+      - name: Grant Gradle permissions
+        if: runner.os != 'Windows'
+        run: chmod +x gradlew
+      - name: Compile, test, javadoc, architecture
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: ./gradlew check --no-daemon
+      - name: Artifact smoke
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: ./gradlew jar sourcesJar javadocJar --no-daemon
+
+  docs-structure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Required documentation present
+        run: |
+          set -e
+          test -f README.md
+          test -f LICENSE
+          test -f AGENTS.md
+          grep -q 'TRACE and MIMIC still build' README.md
+          grep -q 'does not move motors' README.md
+          grep -q 'org.allsparks:trace-mimic-adapter' README.md
+          if grep -E 'setPower|setVelocity' src/main/java -r; then
+            echo 'production sources must not command hardware' >&2
+            exit 1
+          fi

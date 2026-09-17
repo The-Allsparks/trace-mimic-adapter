@@ -1,0 +1,11 @@
+rootProject.name = 'trace-mimic-adapter'
+
+// Composite siblings so this adapter can compile without Maven Central
+// copies of TRACE, MIMIC, or allsparks-contracts. TRACE and MIMIC still
+// build independently; this file does not create a MIMIC <-> TRACE edge.
+['TRACE', 'MIMIC', 'allsparks-contracts'].each { directory ->
+    def settingsFile = file("../${directory}/settings.gradle")
+    if (settingsFile.exists()) {
+        includeBuild("../${directory}")
+    }
+}

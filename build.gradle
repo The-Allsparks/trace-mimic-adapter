@@ -1,0 +1,74 @@
+plugins {
+    id 'java-library'
+    id 'com.diffplug.spotless' version '8.10.2'
+}
+
+group = 'org.allsparks'
+version = '0.1.0-SNAPSHOT'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+    withSourcesJar()
+    withJavadocJar()
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Public methods take MimicEvent and TraceSession, so those types leak.
+    api 'org.allsparks:trace:0.1.0-SNAPSHOT'
+    api 'org.allsparks:mimic:0.1.0-SNAPSHOT'
+    // ComponentId is used internally; TRACE already exposes contracts as api.
+    implementation 'org.allsparks:allsparks-contracts:0.1.0-SNAPSHOT'
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+spotless {
+    java {
+        palantirJavaFormat()
+        target 'src/**/*.java'
+    }
+}
+
+tasks.named('test', Test) {
+    useJUnitPlatform()
+    testLogging {
+        events 'failed'
+        exceptionFormat 'full'
+    }
+}
+
+tasks.named('jar', Jar) {
+    manifest {
+        attributes(
+                'Implementation-Title': 'trace-mimic-adapter',
+                'Implementation-Version': archiveVersion,
+                'Automatic-Module-Name': 'org.allsparks.adapter.tracemimic')
+    }
+}
+
+tasks.named('compileJava', JavaCompile) {
+    options.encoding = 'UTF-8'
+    options.compilerArgs += ['-Xlint:unchecked', '-Xlint:deprecation']
+}
+
+tasks.named('compileTestJava', JavaCompile) {
+    options.encoding = 'UTF-8'
+    options.compilerArgs += ['-Xlint:unchecked', '-Xlint:deprecation']
+}
+
+tasks.named('javadoc', Javadoc) {
+    options.encoding = 'UTF-8'
+    options.addStringOption('Xdoclint:none', '-quiet')
+    failOnError = true
+}
+
+tasks.named('check') {
+    dependsOn 'javadoc'
+    dependsOn 'spotlessCheck'
+}
