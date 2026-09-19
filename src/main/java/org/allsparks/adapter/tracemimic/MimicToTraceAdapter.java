@@ -5,6 +5,7 @@ import java.util.Optional;
 import org.allsparks.contracts.health.HealthSeverity;
 import org.allsparks.contracts.identity.ComponentId;
 import org.allsparks.mimic.log.MimicEvent;
+import org.allsparks.mimic.log.MimicEventSink;
 import org.allsparks.mimic.log.MimicEventType;
 import org.allsparks.trace.contracts.TraceMappings;
 import org.allsparks.trace.core.TracePriority;
@@ -15,14 +16,46 @@ import org.allsparks.trace.session.TraceSession;
  * Copies a MIMIC event onto a TRACE session without commanding hardware.
  *
  * <p>TRACE and MIMIC remain independently adoptable. This adapter is the
- * compile-time edge between them. Callers pass a {@link TraceSession}; the
- * {@code Trace} static facade is not required.
+ * compile-time edge between them. {@link #onEvent} records onto the
+ * {@link TraceSession} supplied at construction. {@link #record} still
+ * accepts an explicit session for tests.
  */
-public final class MimicToTraceAdapter {
+public final class MimicToTraceAdapter implements MimicEventSink {
 
     static final String SIGNAL_ROOT = "MIMIC";
 
-    public MimicToTraceAdapter() {}
+    private final TraceSession sinkSession;
+
+    public MimicToTraceAdapter() {
+        this(null);
+    }
+
+    public MimicToTraceAdapter(TraceSession sinkSession) {
+        this.sinkSession = sinkSession;
+    }
+
+    /**
+     * MIMIC calls this from {@code MimicSession} when wired as {@code eventSink}.
+     * Fail-open so a TRACE typo cannot freeze the mechanism observe loop.
+     */
+    @Override
+    public void onEvent(MimicEvent event) {
+        if (event == null || sinkSession == null) {
+            return;
+        }
+        try {
+            if (!sinkSession.integrationEnabled("MIMIC")) {
+                return;
+            }
+            record(event, sinkSession);
+        } catch (RuntimeException | Error ex) {
+            try {
+                sinkSession.recordException(ex);
+            } catch (RuntimeException | Error ignored) {
+                // Recording the failure also failed. The mechanism loop continues.
+            }
+        }
+    }
 
     /**
      * Record one MIMIC event onto {@code session}.
