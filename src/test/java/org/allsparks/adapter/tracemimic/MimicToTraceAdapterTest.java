@@ -125,6 +125,21 @@ class MimicToTraceAdapterTest {
         }
     }
 
+    @Test
+    void onEventUsesConstructedSessionWhenIntegrationEnabled() {
+        MimicEvent event = new MimicEvent(30L, MimicEventType.LOOP_SAMPLE, "observation", null);
+        try (TraceSession session = new TraceSession(TraceConfig.builder()
+                .memorySink(true)
+                .fileSink(false)
+                .consoleSink(false)
+                .enableIntegration("MIMIC")
+                .build())) {
+            MimicToTraceAdapter wired = new MimicToTraceAdapter(session);
+            wired.onEvent(event);
+            assertEquals("MIMIC/LOOP_SAMPLE", onlyEvent(session).name().value());
+        }
+    }
+
     private static TraceSession memorySession(ManualClock clock) {
         return new TraceSession(TraceConfig.builder()
                 .clock(clock)
